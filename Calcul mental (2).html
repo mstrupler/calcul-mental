@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Calcul mental</title>
+<style>
+:root{--bg:#f6f7fb;--card:#fff;--text:#1d2233;--muted:#6b7288;--accent:#4f46e5;--ok:#16a34a;--ko:#dc2626;--line:#dfe3ee;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#12141c;--card:#1c1f2b;--text:#eceef6;--muted:#9aa1b8;--accent:#818cf8;--ok:#4ade80;--ko:#f87171;--line:#2d3243}}
+:root[data-theme="dark"]{--bg:#12141c;--card:#1c1f2b;--text:#eceef6;--muted:#9aa1b8;--accent:#818cf8;--ok:#4ade80;--ko:#f87171;--line:#2d3243}
+*{box-sizing:border-box}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;min-height:100dvh;display:flex;justify-content:center;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+main{width:100%;max-width:460px;padding:10px 12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px}
+h1{font-size:1.5rem;margin:0 0 16px;text-align:center}
+.row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 0;min-height:58px;border-bottom:1px solid var(--line)}
+.row:last-of-type{border-bottom:0}
+label{font-size:1rem}
+input[type=number],input.ans{width:100px;padding:10px;font-size:1.2rem;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text);text-align:center}
+input[type=checkbox]{width:30px;height:30px;accent-color:var(--accent)}
+button{font:inherit;font-size:1.1rem;border:0;border-radius:12px;padding:16px;background:var(--accent);color:#fff;font-weight:600;cursor:pointer;width:100%}
+button.sec{background:var(--bg);color:var(--text);border:1px solid var(--line)}
+.hidden{display:none}
+#err{color:var(--ko);text-align:center;min-height:1.2em;margin:8px 0 0;font-size:.9rem}
+.top{display:flex;justify-content:space-between;color:var(--muted);font-size:.95rem;margin-bottom:10px}
+.bar{height:10px;background:var(--line);border-radius:6px;overflow:hidden}
+#fill{height:100%;width:100%;background:var(--accent)}
+#time{text-align:center;font-size:1.1rem;margin:8px 0 0;color:var(--muted)}
+#q{font-size:clamp(1.6rem,8.5vw,2.3rem);font-weight:700;text-align:center;margin:16px 0 4px;word-break:break-word}
+.entry{display:flex;gap:8px;margin-bottom:12px}
+.entry input{flex:1;min-width:0;width:auto;font-size:1.8rem;padding:12px}
+.entry .sign{width:72px;font-size:1.5rem;padding:0}
+#fb{display:flex;align-items:center;justify-content:center;text-align:center;font-size:1.15rem;font-weight:700;min-height:2.8em;margin:2px 0 6px}
+.big{font-size:3rem;text-align:center;font-weight:700;margin:12px 0}
+.center{text-align:center;color:var(--muted)}
+</style>
+</head>
+<body>
+<main>
+<section id="cfg" class="card">
+<h1>🧠 Calcul mental</h1>
+<div class="row"><label for="maxv">Nombre maximal<br><small style="color:var(--muted)">en valeur absolue, résultat compris</small></label><input type="number" id="maxv" min="2" max="999999" value="100"></div>
+<div class="row"><label for="add">Additions</label><input type="checkbox" id="add" checked></div>
+<div class="row"><label for="sub">Soustractions</label><input type="checkbox" id="sub" checked></div>
+<div class="row"><label for="neg">Nombres négatifs autorisés</label><input type="checkbox" id="neg"></div>
+<div class="row"><label for="secs">Temps par question (s)</label><input type="number" id="secs" min="5" max="300" value="30"></div>
+<div class="row"><label for="nq">Nombre de questions</label><input type="number" id="nq" min="1" max="100" value="10"></div>
+<div class="row"><label for="nor">Calculs oraux au début<br><small style="color:var(--muted)">lus à voix haute, non affichés</small></label><input type="number" id="nor" min="0" max="100" value="5"></div>
+<p id="err"></p>
+<button id="start">Start</button>
+</section>
+
+<section id="game" class="card hidden">
+<div class="top"><span id="prog"></span><span id="score"></span></div>
+<div class="bar"><div id="fill"></div></div>
+<p id="time"></p>
+<div id="q"></div>
+<div id="fb"></div>
+<div class="entry">
+<button id="sgn" class="sec sign hidden" type="button" aria-label="Changer le signe">±</button>
+<input id="ans" class="ans" type="text" inputmode="numeric" autocomplete="off" placeholder="Réponse" enterkeyhint="done">
+</div>
+<button id="ok">Valider</button>
+<button id="rep" class="sec hidden" style="margin-top:8px" type="button"></button>
+</section>
+
+<section id="end" class="card hidden">
+<h1>Terminé !</h1>
+<div class="big" id="final"></div>
+<p class="center" id="msg"></p>
+<button id="again">Rejouer</button>
+</section>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+let cfg,idx,score,cur,deadline,timer,locked;
+const MINUS="\u2212";
+const hasTTS="speechSynthesis" in window&&"SpeechSynthesisUtterance" in window;
+let speakTok=0;
+function speak(text,cb){
+  const tok=++speakTok;let done=false;
+  const fin=()=>{if(done||tok!==speakTok)return;done=true;clearTimeout(fs);cb()};
+  const fs=setTimeout(fin,12000);
+  try{
+    speechSynthesis.cancel();
+    const u=new SpeechSynthesisUtterance(text);u.lang="fr-FR";u.rate=.9;
+    const v=speechSynthesis.getVoices().find(v=>v.lang&&v.lang.toLowerCase().startsWith("fr"));
+    if(v)u.voice=v;
+    u.onend=fin;u.onerror=fin;speechSynthesis.speak(u);
+  }catch(e){fin()}
+}
+function setInput(on){
+  $("ans").readOnly=!on;$("ok").disabled=!on;
+  $("rep").disabled=!on||cur.rep>=1;
+  if(on)$("ans").focus();
+}
+function startTimer(){
+  if(locked)return;
+  setInput(true);
+  if(cur.oral)$("q").textContent="🔊 Calcul oral : à toi !";
+  deadline=Date.now()+cfg.secs*1000;
+  clearInterval(timer);timer=setInterval(tick,100);tick();
+}
+const fmt=n=>n<0?MINUS+Math.abs(n):String(n);
+const wrap=n=>n<0?"("+fmt(n)+")":fmt(n);
+const rnd=(a,b)=>Math.floor(Math.random()*(b-a+1))+a;
+
+function show(id){["cfg","game","end"].forEach(s=>$(s).classList.toggle("hidden",s!==id))}
+
+function gen(){
+  const hi=cfg.max,lo=1;
+  const ops=[];if(cfg.add)ops.push("+");if(cfg.sub)ops.push("-");
+  const op=ops[rnd(0,ops.length-1)];
+  let a,b,res,n=0;
+  do{
+    a=rnd(lo,hi);b=rnd(lo,hi);
+    if(cfg.neg){if(Math.random()<.5)a=-a;if(Math.random()<.5)b=-b}
+    else if(op==="-"&&a<b){[a,b]=[b,a]}
+    res=op==="+"?a+b:a-b;
+  }while(Math.abs(res)>hi&&++n<500);
+  if(Math.abs(res)>hi){a=1;b=1;res=op==="+"?2:0}
+  const text=wrap(a)+" "+(op==="+"?"+":MINUS)+" "+wrap(b);
+  const sp=n=>n<0?"négatif "+Math.abs(n):String(n);
+  return{text,res,spoken:sp(a)+" "+(op==="+"?"plus":"moins")+" "+sp(b)};
+}
+
+function next(){
+  if(idx>=cfg.nq){return finish()}
+  idx++;locked=false;cur=gen();
+  $("prog").textContent="Question "+idx+" / "+cfg.nq;
+  $("score").textContent="Score : "+score;
+  cur.oral=hasTTS&&idx<=cfg.nor;cur.rep=0;
+  $("fb").textContent="";$("fb").style.color="";
+  $("ans").value="";
+  clearInterval(timer);
+  $("rep").classList.toggle("hidden",!cur.oral);
+  $("rep").textContent="🔁 Réécouter (1 restante)";
+  if(cur.oral){
+    $("q").textContent="🔊 Écoute…";
+    $("fill").style.width="100%";$("time").textContent="";
+    setInput(false);
+    speak(cur.spoken,startTimer);
+  }else{
+    $("q").textContent=cur.text+" = ?";
+    startTimer();
+  }
+}
+
+function tick(){
+  const left=deadline-Date.now();
+  if(left<=0){return resolve(null)}
+  $("fill").style.width=(left/(cfg.secs*1000)*100)+"%";
+  $("fill").style.background=left<5000?"var(--ko)":"var(--accent)";
+  $("time").textContent="⏱ "+Math.ceil(left/1000)+" s";
+}
+
+function resolve(val){
+  if(locked)return;locked=true;clearInterval(timer);speakTok++;
+  if(hasTTS)speechSynthesis.cancel();
+  $("rep").disabled=true;
+  if(cur.oral)$("q").textContent=cur.text+" = ?";
+  $("ans").readOnly=true;$("ok").disabled=true;
+  const fb=$("fb");
+  if(val!==null&&val===cur.res){
+    score++;fb.style.color="var(--ok)";fb.textContent="✅ Bravo !";
+    setTimeout(next,900);
+  }else{
+    fb.style.color="var(--ko)";
+    fb.textContent=(val===null?"⏰ Temps écoulé. ":"❌ Faux. ")+"Réponse : "+fmt(cur.res);
+    setTimeout(next,2500);
+  }
+  $("score").textContent="Score : "+score;
+}
+
+function submit(){
+  if(locked)return;
+  const t=$("ans").value.trim().replace(/[\u2212\u2013]/g,"-");
+  if(!/^-?\d+$/.test(t))return;
+  resolve(parseInt(t,10));
+}
+
+function finish(){
+  speakTok++;if(hasTTS)speechSynthesis.cancel();
+  show("end");
+  $("final").textContent=score+" / "+cfg.nq;
+  const r=score/cfg.nq;
+  $("msg").textContent=r===1?"Sans faute, bravo ! 🏆":r>=.7?"Très bien ! 👏":r>=.4?"Pas mal, continue à t’entraîner 💪":"On réessaie, ça viendra 🙂";
+}
+
+$("start").onclick=()=>{
+  const c={max:+$("maxv").value,add:$("add").checked,sub:$("sub").checked,neg:$("neg").checked,secs:+$("secs").value,nq:+$("nq").value,nor:+$("nor").value};
+  const e=$("err");e.textContent="";
+  if(!c.add&&!c.sub){e.textContent="Coche au moins addition ou soustraction.";return}
+  if(!(c.max>=2&&c.max<=999999)){e.textContent="Nombre maximal : entre 2 et 999999.";return}
+  if(!(c.secs>=5)){e.textContent="Temps minimum : 5 s.";return}
+  if(!(c.nq>=1)){e.textContent="Au moins 1 question.";return}
+  c.nor=Math.min(Math.max(c.nor||0,0),c.nq);
+  if(c.nor>0&&!hasTTS)alert("Synthèse vocale indisponible sur cet appareil : les calculs seront affichés.");
+  cfg=c;idx=0;score=0;
+  $("sgn").classList.toggle("hidden",!c.neg);
+  show("game");next();
+};
+$("ok").onclick=submit;
+$("ans").addEventListener("keydown",e=>{if(e.key==="Enter")submit()});
+$("sgn").onclick=()=>{
+  const i=$("ans");i.value=i.value.startsWith("-")?i.value.slice(1):"-"+i.value;i.focus();
+};
+$("again").onclick=()=>show("cfg");
+$("rep").onclick=()=>{
+  if(locked||cur.rep>=1)return;
+  cur.rep++;
+  const left=Math.max(deadline-Date.now(),1000);
+  clearInterval(timer);setInput(false);
+  $("rep").textContent="Plus de réécoute";
+  $("q").textContent="🔊 Écoute…";
+  speak(cur.spoken,()=>{
+    if(locked)return;
+    setInput(true);
+    $("q").textContent="🔊 Calcul oral : à toi !";
+    deadline=Date.now()+left;
+    clearInterval(timer);timer=setInterval(tick,100);tick();
+  });
+};
+["ok","sgn","rep"].forEach(id=>$(id).addEventListener("mousedown",e=>e.preventDefault()));
+</script>
+</body>
+</html>
